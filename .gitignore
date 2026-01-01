@@ -12,10 +12,10 @@ env/
 .env/
 
 # Outputs
-outputs/
-outputs/figures/
 *.png
 *.pdf
+!outputs/figures/*.png
+!outputs/figures/*.pdf
 
 # Jupyter
 .ipynb_checkpoints/
