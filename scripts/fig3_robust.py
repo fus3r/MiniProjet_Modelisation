@@ -108,9 +108,10 @@ def main() -> None:
             ts_traj.append(day + 1)
             day += 1
 
+        traj_xs = np.array(xs_traj)
         trajectories.append({
             "ts": np.array(ts_traj),
-            "xs": np.array(xs_traj),
+            "xs": traj_xs,
             "us": np.array(us_traj),
         })
 
@@ -118,7 +119,13 @@ def main() -> None:
         if (idx + 1) % 5 == 0:
             print(f"  Completed {idx+1}/{n_sim_scenarios} scenarios")
 
+    # Report max ICU violation
+    max_T_all = max(traj["xs"][:, 3].max() for traj in trajectories)
+    max_violation = max_T_all - T_MAX
     print("-" * 60)
+    print(f"max(T - T_MAX) = {max_violation:.6e}")
+    if max_violation > 1e-6:
+        print(f"  WARNING: ICU threshold exceeded!")
 
     # Create figure
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)

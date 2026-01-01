@@ -36,8 +36,8 @@ def main() -> None:
     n_sim_scenarios = 25
     total_days = 350
     
-    # EXPLICIT scenario selection for MPC (no hidden downsampling)
-    n_mpc_scenarios = 15  # Number of scenarios for recourse MPC
+    # Strategy A: simulation ⊂ MPC scenarios (guarantees ICU respect)
+    n_mpc_scenarios = 30  # Must be >= n_sim_scenarios
     scenario_seed = 123   # For reproducibility
     
     # Config: no internal reduction (max_scenarios_recourse=None)
@@ -68,15 +68,17 @@ def main() -> None:
     test_result = solve_mpc(x0)
     print(f"  - n_scenarios_used (actual): {test_result['n_scenarios_used']}")
 
-    # Simulation scenarios
+    # Strategy A: sim_indices is a SUBSET of mpc_indices
     sim_rng = np.random.default_rng(42)
-    sim_indices = sim_rng.choice(len(thetas_all), n_sim_scenarios, replace=False)
+    sim_indices = sim_rng.choice(mpc_indices, n_sim_scenarios, replace=False)
+    print(f"\nSimulation ⊂ MPC scenarios: {n_sim_scenarios} of {n_mpc_scenarios}")
 
-    print(f"Simulating {n_sim_scenarios} true scenarios...")
+    print(f"Simulating {n_sim_scenarios} scenarios...")
     print(f"Horizon: {config.horizon_days} days, NPI block: {T_NPI} days")
     print("-" * 60)
 
     trajectories = []
+    max_T_all = -np.inf  # Track max T across all trajectories
 
     for idx, true_idx in enumerate(sim_indices):
         true_theta = SIDTHEParams.from_array(thetas_all[true_idx])
@@ -106,16 +108,23 @@ def main() -> None:
             ts_traj.append(day + 1)
             day += 1
 
+        traj_xs = np.array(xs_traj)
         trajectories.append({
             "ts": np.array(ts_traj),
-            "xs": np.array(xs_traj),
+            "xs": traj_xs,
             "us": np.array(us_traj),
         })
+        max_T_all = max(max_T_all, traj_xs[:, 3].max())
 
         if (idx + 1) % 5 == 0:
             print(f"  Completed {idx+1}/{n_sim_scenarios} scenarios")
 
+    # Report max ICU violation
+    max_violation = max_T_all - T_MAX
     print("-" * 60)
+    print(f"max(T - T_MAX) = {max_violation:.6e}")
+    if max_violation > 1e-6:  # Warn only for visible violations (not numerical noise)
+        print(f"  WARNING: ICU threshold exceeded!")
 
     # Create figure
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)

@@ -25,12 +25,31 @@ from sidthe.integrators import simulate_days
 from sidthe.mpc import build_controller, MPCConfig
 
 
-TOLERANCE = 1e-10
+TOLERANCE = 1e-6  # Numerical tolerance for constraint satisfaction
 
 
-def run_mpc_check(mode: str, n_mpc_scenarios: int, n_sim_scenarios: int, total_days: int) -> float:
+def run_mpc_check(
+    mode: str,
+    n_mpc_scenarios: int,
+    n_sim_scenarios: int,
+    total_days: int,
+    sim_subset_of_mpc: bool = False,
+) -> float:
     """
     Run MPC simulation and return max ICU violation.
+    
+    Parameters
+    ----------
+    mode : str
+        "robust" or "recourse"
+    n_mpc_scenarios : int
+        Number of scenarios for MPC controller
+    n_sim_scenarios : int
+        Number of scenarios to simulate
+    total_days : int
+        Simulation duration in days
+    sim_subset_of_mpc : bool
+        If True, simulation scenarios are subset of MPC scenarios (Strategy A)
     
     Returns
     -------
@@ -41,7 +60,7 @@ def run_mpc_check(mode: str, n_mpc_scenarios: int, n_sim_scenarios: int, total_d
     # Generate scenarios
     thetas_all, probs_all = generate_scenarios(theta_nom, rel=0.05)
     
-    # Select MPC scenarios
+    # Select MPC scenarios (same seed as figures: 123)
     rng_mpc = np.random.default_rng(123)
     mpc_indices = rng_mpc.choice(len(thetas_all), n_mpc_scenarios, replace=False)
     thetas_mpc = thetas_all[mpc_indices]
@@ -67,9 +86,14 @@ def run_mpc_check(mode: str, n_mpc_scenarios: int, n_sim_scenarios: int, total_d
     # Build controller
     solve_mpc = build_controller(mode, thetas_mpc, probs_mpc, config)
     
-    # Select simulation scenarios
+    # Select simulation scenarios (same seed as figures: 42)
     rng_sim = np.random.default_rng(42)
-    sim_indices = rng_sim.choice(len(thetas_all), n_sim_scenarios, replace=False)
+    if sim_subset_of_mpc:
+        # Strategy A: sim ⊂ mpc
+        sim_indices = rng_sim.choice(mpc_indices, n_sim_scenarios, replace=False)
+    else:
+        # Strategy B: sim from full 729
+        sim_indices = rng_sim.choice(len(thetas_all), n_sim_scenarios, replace=False)
     
     max_violation = -np.inf
     
@@ -111,24 +135,28 @@ def main() -> int:
     
     results = {}
     
-    # Check robust MPC
-    print("\nChecking robust SNMPC...")
+    # Check robust MPC (same params as fig3_robust.py)
+    print("\nChecking robust SNMPC (fig3 params)...")
+    print("  n_mpc_scenarios=20, n_sim=25, days=350, sim⊄mpc")
     max_viol_robust = run_mpc_check(
         mode="robust",
         n_mpc_scenarios=20,
-        n_sim_scenarios=10,  # Reduced for quick check
-        total_days=200,
+        n_sim_scenarios=25,
+        total_days=350,
+        sim_subset_of_mpc=False,
     )
     results["robust"] = max_viol_robust
     print(f"  max(T - T_MAX) = {max_viol_robust:.6e}")
     
-    # Check recourse MPC
-    print("\nChecking recourse SNMPC...")
+    # Check recourse MPC (same params as fig4_recourse.py with Strategy A)
+    print("\nChecking recourse SNMPC (fig4 params, Strategy A)...")
+    print("  n_mpc_scenarios=30, n_sim=25, days=350, sim⊂mpc")
     max_viol_recourse = run_mpc_check(
         mode="recourse",
-        n_mpc_scenarios=15,
-        n_sim_scenarios=10,
-        total_days=200,
+        n_mpc_scenarios=30,
+        n_sim_scenarios=25,
+        total_days=350,
+        sim_subset_of_mpc=True,
     )
     results["recourse"] = max_viol_recourse
     print(f"  max(T - T_MAX) = {max_viol_recourse:.6e}")

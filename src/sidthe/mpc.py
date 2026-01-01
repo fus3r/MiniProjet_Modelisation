@@ -62,6 +62,25 @@ class MPCConfig:
         return self.horizon_days // self.npi_days
 
 
+def _compute_constraint_violation(g: np.ndarray, lbg: list, ubg: list) -> float:
+    """
+    Compute max constraint violation accounting for bounds.
+    
+    violation = max(max(lbg - g), max(g - ubg), 0)
+    """
+    g_arr = np.array(g).flatten()
+    lbg_arr = np.array(lbg, dtype=float)
+    ubg_arr = np.array(ubg, dtype=float)
+    
+    # Lower bound violation: lbg - g (positive if violated)
+    lb_viol = np.where(np.isfinite(lbg_arr), lbg_arr - g_arr, -np.inf)
+    # Upper bound violation: g - ubg (positive if violated)
+    ub_viol = np.where(np.isfinite(ubg_arr), g_arr - ubg_arr, -np.inf)
+    
+    max_viol = max(np.max(lb_viol), np.max(ub_viol), 0.0)
+    return float(max_viol)
+
+
 def _build_casadi_rhs() -> ca.Function:
     """
     Build CasADi function for SIDTHE ODE right-hand side.
@@ -344,7 +363,7 @@ def _build_vanilla_controller(
                 "u_blocks": u_opt,
                 "objective": float(sol["f"]),
                 "iterations": stats.get("iter_count", 0),
-                "constraint_violation": float(np.max(np.abs(sol["g"]))),
+                "constraint_violation": _compute_constraint_violation(sol["g"], lbg, ubg),
                 "n_scenarios_used": 1,
             }
         except Exception as e:
@@ -500,7 +519,7 @@ def _build_robust_controller(
                 "u_blocks": u_opt,
                 "objective": float(sol["f"]),
                 "iterations": stats.get("iter_count", 0),
-                "constraint_violation": float(np.max(np.abs(sol["g"]))),
+                "constraint_violation": _compute_constraint_violation(sol["g"], lbg, ubg),
                 "n_scenarios_used": n_scenarios_used,
             }
         except Exception as e:
@@ -680,7 +699,7 @@ def _build_recourse_controller(
                 "u_blocks": u_blocks_avg,
                 "objective": float(sol["f"]),
                 "iterations": stats.get("iter_count", 0),
-                "constraint_violation": float(np.max(np.abs(sol["g"]))),
+                "constraint_violation": _compute_constraint_violation(sol["g"], lbg, ubg),
                 "n_scenarios_used": n_scenarios_used,
             }
         except Exception as e:
