@@ -86,6 +86,8 @@ T_NPI: int = 14  # Non-pharmaceutical intervention delay [days]
 # ---------------------------------------------------------------------------
 # Initial condition x0 (page 6)
 # Order: [S, I, D, T, H, E]
+# Note: sum(x0) = 0.99829, slightly < 1 due to paper's original values.
+# This is intentional to match the reference; mass is conserved during integration.
 # ---------------------------------------------------------------------------
 
 x0: np.ndarray = np.array(

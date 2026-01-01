@@ -38,8 +38,8 @@ def main() -> None:
 
     # Generate scenarios for "true" systems
     thetas_all, _ = generate_scenarios(theta_nom, rel=0.05)
-    np.random.seed(42)
-    true_indices = np.random.choice(len(thetas_all), n_true_scenarios, replace=False)
+    rng = np.random.default_rng(42)  # Modern seed API for reproducibility
+    true_indices = rng.choice(len(thetas_all), n_true_scenarios, replace=False)
 
     # Build vanilla controller (uses nominal parameters only)
     nominal_theta = theta_nom.to_array().reshape(1, 6)
@@ -160,14 +160,16 @@ def main() -> None:
 
     plt.tight_layout()
 
-    # Save figure
+    # Save figure (PNG + PDF)
     output_dir = REPO_ROOT / "outputs" / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "fig7_vanilla_infeasibility.png"
-    plt.savefig(fig_path, dpi=150)
+    plt.savefig(fig_path, dpi=200, bbox_inches="tight")
+    plt.savefig(fig_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close()
 
     print(f"\nFigure saved: {fig_path}")
+    print(f"Figure saved: {fig_path.with_suffix('.pdf')}")
     print("=" * 60)
 
 

@@ -160,14 +160,16 @@ def main() -> None:
 
     plt.tight_layout()
 
-    # Save
+    # Save (PNG + PDF)
     output_dir = REPO_ROOT / "outputs" / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "fig3_robust.png"
-    plt.savefig(fig_path, dpi=150)
+    plt.savefig(fig_path, dpi=200, bbox_inches="tight")
+    plt.savefig(fig_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close()
 
     print(f"\nFigure saved: {fig_path}")
+    print(f"Figure saved: {fig_path.with_suffix('.pdf')}")
     print("=" * 60)
 
 

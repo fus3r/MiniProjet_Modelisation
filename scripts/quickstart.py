@@ -82,10 +82,12 @@ def main() -> None:
     ax.set_ylim(bottom=0)
 
     plt.tight_layout()
-    plt.savefig(fig_path, dpi=150)
+    plt.savefig(fig_path, dpi=200, bbox_inches="tight")
+    plt.savefig(fig_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close()
 
     print(f"Figure saved: {fig_path}")
+    print(f"Figure saved: {fig_path.with_suffix('.pdf')}")
     print("=" * 60)
 
 
