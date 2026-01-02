@@ -1,11 +1,11 @@
 """
-SIDTHE epidemic model package.
+Package du modèle épidémique SIDTHE.
 
-Provides ODE dynamics, RK4 integration, parameter handling,
-safe set computation, and MPC controllers for the SIDTHE
-compartmental model with control inputs.
+Fournit la dynamique EDO, l'intégration RK4, la gestion des paramètres,
+le calcul d'ensemble sûr, et les contrôleurs MPC pour le modèle
+compartimental SIDTHE avec entrées de contrôle.
 
-Reference: Paper Eq (4a)-(4f) for dynamics, page 3.
+Référence : Eq (4a)-(4f) de l'article pour la dynamique, page 3.
 """
 from .params import SIDTHEParams, x0, theta_nom, DT, U_MAX, T_MAX, T_NPI
 from .params import generate_scenarios

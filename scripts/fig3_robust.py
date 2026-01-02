@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Figure 3: Robust SNMPC simulation.
+Figure 3 : Simulation SNMPC robuste.
 
-Demonstrates robust scenario-based NMPC (Eq 14) where the control
-sequence is shared across all scenarios.
+Démontre le SNMPC robuste basé scénarios (Eq 14) où la séquence
+de contrôle est partagée entre tous les scénarios.
 
-Reference: Paper Figure 3, page 6.
+Référence : Figure 3 de l'article, page 6.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/fig3_robust.py
 """
 import sys
@@ -26,56 +26,56 @@ from sidthe.mpc import build_controller, MPCConfig
 
 
 def main() -> None:
-    """Run robust SNMPC simulation."""
+    """Lance la simulation SNMPC robuste."""
     print("=" * 60)
-    print("Figure 3: Robust SNMPC Simulation")
+    print("Figure 3 : Simulation SNMPC robuste")
     print("=" * 60)
 
     # Configuration
-    n_sim_scenarios = 25  # Number of scenarios to simulate
+    n_sim_scenarios = 25  # Nombre de scénarios à simuler
     total_days = 350
     
-    # EXPLICIT scenario selection for MPC (no hidden downsampling)
-    n_mpc_scenarios = 20  # Number of scenarios for robust MPC
-    scenario_seed = 123   # For reproducibility
+    # Sélection EXPLICITE des scénarios pour le MPC (pas de sous-échantillonnage caché)
+    n_mpc_scenarios = 20  # Nombre de scénarios pour le MPC robuste
+    scenario_seed = 123   # Pour reproductibilité
     
-    # Config: no internal reduction (max_scenarios_robust=None)
+    # Config : pas de réduction interne (max_scenarios_robust=None)
     config = MPCConfig(
         horizon_days=84,
         npi_days=T_NPI,
         enforce_icu_daily=True,
-        max_scenarios_robust=None,  # Use exactly what we pass
+        max_scenarios_robust=None,  # Utilise exactement ce qu'on passe
     )
 
-    # Generate all 729 scenarios
+    # Génère les 729 scénarios
     thetas_all, probs_all = generate_scenarios(theta_nom, rel=0.05)
 
-    # EXPLICIT: Select subset of scenarios for robust MPC
+    # EXPLICITE : sélection d'un sous-ensemble pour le MPC robuste
     rng = np.random.default_rng(scenario_seed)
     mpc_indices = rng.choice(len(thetas_all), n_mpc_scenarios, replace=False)
     thetas_mpc = thetas_all[mpc_indices]
     probs_mpc = probs_all[mpc_indices]
     probs_mpc = probs_mpc / probs_mpc.sum()
 
-    print(f"Building robust controller...")
-    print(f"  - n_mpc_scenarios: {n_mpc_scenarios}")
-    print(f"  - scenario_seed: {scenario_seed}")
-    print(f"  - enforce_icu_daily: {config.enforce_icu_daily}")
+    print(f"Construction du contrôleur robuste...")
+    print(f"  - n_mpc_scenarios : {n_mpc_scenarios}")
+    print(f"  - scenario_seed : {scenario_seed}")
+    print(f"  - enforce_icu_daily : {config.enforce_icu_daily}")
     solve_mpc = build_controller("robust", thetas_mpc, probs_mpc, config)
     
-    # Verify actual scenarios used
+    # Vérifie le nombre réel de scénarios utilisés
     test_result = solve_mpc(x0)
-    print(f"  - n_scenarios_used (actual): {test_result['n_scenarios_used']}")
+    print(f"  - n_scenarios_used (effectif) : {test_result['n_scenarios_used']}")
 
-    # Select scenarios for simulation
+    # Sélection des scénarios pour la simulation
     sim_rng = np.random.default_rng(42)
     sim_indices = sim_rng.choice(len(thetas_all), n_sim_scenarios, replace=False)
 
-    print(f"Simulating {n_sim_scenarios} true scenarios...")
-    print(f"Horizon: {config.horizon_days} days, NPI block: {T_NPI} days")
+    print(f"Simulation de {n_sim_scenarios} scénarios réels...")
+    print(f"Horizon : {config.horizon_days} jours, bloc NPI : {T_NPI} jours")
     print("-" * 60)
 
-    # Storage
+    # Stockage
     trajectories = []
 
     for idx, true_idx in enumerate(sim_indices):
@@ -94,11 +94,11 @@ def main() -> None:
                 if result["status"]:
                     u_applied = result["u0_applied"]
                 else:
-                    # Fallback to maximum control if infeasible
+                    # Repli sur contrôle max si infaisable
                     u_applied = config.u_max
-                    print(f"  Scenario {idx+1}: infeasible at day {day}, using u_max")
+                    print(f"  Scénario {idx+1} : infaisable au jour {day}, utilise u_max")
 
-            # Simulate one day
+            # Simule un jour
             u_seq = np.array([u_applied])
             _, xs_step = simulate_days(x_current, true_theta, u_seq, dt=DT)
             x_current = xs_step[-1]
@@ -115,22 +115,22 @@ def main() -> None:
             "us": np.array(us_traj),
         })
 
-        # Progress
+        # Progression
         if (idx + 1) % 5 == 0:
-            print(f"  Completed {idx+1}/{n_sim_scenarios} scenarios")
+            print(f"  Terminé {idx+1}/{n_sim_scenarios} scénarios")
 
-    # Report max ICU violation
+    # Rapport violation max réa
     max_T_all = max(traj["xs"][:, 3].max() for traj in trajectories)
     max_violation = max_T_all - T_MAX
     print("-" * 60)
     print(f"max(T - T_MAX) = {max_violation:.6e}")
     if max_violation > 1e-6:
-        print(f"  WARNING: ICU threshold exceeded!")
+        print(f"  ATTENTION : Seuil réa dépassé !")
 
-    # Create figure
+    # Création de la figure
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Top: % ICU
+    # Haut : % réa
     ax1 = axes[0]
     for traj in trajectories:
         ts = traj["ts"]

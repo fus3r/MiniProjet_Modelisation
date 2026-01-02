@@ -1,19 +1,19 @@
 """
-Safe set computation for SIDTHE model.
+Calcul de l'ensemble sûr pour le modèle SIDTHE.
 
-Reference: Paper Eq (6)-(7), page 3.
-Safe set X_f ensures invariance and constraint satisfaction.
+Référence : Eq (6)-(7), page 3.
+L'ensemble sûr X_f garantit l'invariance et le respect des contraintes.
 
-The bounds are computed from the endemic equilibrium analysis (Eq 7).
-These represent the worst-case equilibrium values that the system
-can reach, used to define terminal constraints for MPC.
+Les bornes sont calculées depuis l'analyse de l'équilibre endémique (Eq 7).
+Elles représentent les valeurs d'équilibre pire cas, utilisées
+comme contraintes terminales pour le MPC.
 
-Example verification (729 scenarios, ±5%):
+Vérification (729 scénarios, ±5%):
     >>> from sidthe.params import theta_nom, generate_scenarios
     >>> from sidthe.safe_set import safe_set_intersection
     >>> thetas, _ = generate_scenarios(theta_nom, rel=0.05)
     >>> bounds = safe_set_intersection(thetas)
-    >>> # Expected approx: Smax=1, Imax≈0.0188, Dmax≈0.0226, Tmax≈0.002
+    >>> # Attendu environ: Smax=1, Imax≈0.0188, Dmax≈0.0226, Tmax≈0.002
 """
 import numpy as np
 
@@ -22,35 +22,12 @@ from .params import SIDTHEParams, U_MAX, T_MAX
 
 def invariant_bounds(theta: SIDTHEParams) -> dict[str, float]:
     """
-    Compute safe set bounds for a single parameter set.
+    Calcule les bornes de l'ensemble sûr pour un jeu de paramètres.
 
-    Implements Eq (7) from the paper, page 3.
-    The bounds correspond to the endemic equilibrium under no control,
-    scaled appropriately to ensure constraint satisfaction.
+    Implémente Eq (7). On fixe T_max (contrainte réa) puis on remonte
+    les bornes compatibles pour D et I.
 
-    From paper page 7, the intersection values are:
-        Smax = 1
-        Imax = 0.0188
-        Dmax = 0.0226
-        Tmax = 0.002 (= T_MAX, the ICU constraint)
-
-    The equilibrium analysis gives:
-        I_eq proportional to (α - γ) / α  at disease-free equilibrium threshold
-        D_eq = γ / (δ + λ) * I_eq
-        T_eq = δ / (σ + τ) * D_eq
-
-    For robust MPC, we use T_max = T_MAX (ICU constraint) and derive
-    compatible bounds for other states.
-
-    Parameters
-    ----------
-    theta : SIDTHEParams
-        Model parameters (α, γ, λ, δ, σ, τ).
-
-    Returns
-    -------
-    bounds : dict
-        Dictionary with keys 'Smax', 'Imax', 'Dmax', 'Tmax'.
+    Valeurs de référence (page 7): Smax=1, Imax=0.0188, Dmax=0.0226, Tmax=0.002
     """
     alpha = theta.alpha
     gamma = theta.gamma
@@ -59,19 +36,19 @@ def invariant_bounds(theta: SIDTHEParams) -> dict[str, float]:
     sigma = theta.sigma
     tau = theta.tau
 
-    # Eq (7a): S_max = 1 (population fraction)
+    # Eq (7a): S_max = 1 (fraction de population)
     Smax = 1.0
 
-    # T_max is given by ICU constraint
+    # T_max donné par la contrainte de capacité réa
     Tmax = T_MAX  # = 0.002
 
-    # Back-calculate D_max from T_max: T = δ/(σ+τ) * D => D = (σ+τ)/δ * T
+    # Calcul inverse de D_max depuis T_max : T = δ/(σ+τ) × D => D = (σ+τ)/δ × T
     if delta > 0:
         Dmax = (sigma + tau) / delta * Tmax
     else:
         Dmax = 0.0
 
-    # Back-calculate I_max from D_max: D = γ/(δ+λ) * I => I = (δ+λ)/γ * D
+    # Calcul inverse de I_max depuis D_max : D = γ/(δ+λ) × I => I = (δ+λ)/γ × D
     if gamma > 0:
         Imax = (delta + lam) / gamma * Dmax
     else:
@@ -82,37 +59,23 @@ def invariant_bounds(theta: SIDTHEParams) -> dict[str, float]:
 
 def safe_set_intersection(thetas_array: np.ndarray) -> dict[str, float]:
     """
-    Compute safe set as intersection over all scenarios.
+    Calcule l'ensemble sûr comme intersection sur tous les scénarios.
 
-    For robust constraint satisfaction, we take the minimum bound
-    across all parameter scenarios for each state.
+    Pour la robustesse, on prend le minimum des bornes sur tous les scénarios.
 
-    Parameters
-    ----------
-    thetas_array : np.ndarray
-        Array of shape (n_scenarios, 6) with parameter sets.
-
-    Returns
-    -------
-    bounds : dict
-        Dictionary with keys 'Smax', 'Imax', 'Dmax', 'Tmax',
-        representing the intersection (min) over all scenarios.
-
-    Notes
-    -----
-    For 729 scenarios with ±5% on theta_nom, expected values (page 7):
+    Pour 729 scenarios avec +/-5% sur theta_nom, valeurs attendues (page 7):
         Smax = 1.0
-        Imax ≈ 0.0188
-        Dmax ≈ 0.0226
-        Tmax ≈ 0.002
+        Imax ~ 0.0188
+        Dmax ~ 0.0226
+        Tmax ~ 0.002
     """
     n_scenarios = thetas_array.shape[0]
 
-    # Initialize with first scenario
+    # Initialise avec le premier scénario
     theta0 = SIDTHEParams.from_array(thetas_array[0])
     result = invariant_bounds(theta0)
 
-    # Take minimum over all scenarios
+    # Prend le min sur tous les scénarios
     for i in range(1, n_scenarios):
         theta_i = SIDTHEParams.from_array(thetas_array[i])
         bounds_i = invariant_bounds(theta_i)

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Figure 7: Vanilla MPC infeasibility demonstration.
+Figure 7 : Démonstration de l'infaisabilité du MPC vanilla.
 
-Demonstrates that vanilla MPC (using only nominal parameters) can become
-infeasible when the true system parameters differ from the nominal.
+Montre que le MPC nominal (utilisant uniquement les paramètres nominaux)
+peut devenir infaisable quand les vrais paramètres diffèrent du nominal.
 
-Reference: Paper Figure 7, page 7.
+Référence : Figure 7 de l'article, page 7.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/fig7_vanilla_infeasibility.py
 """
 import sys
@@ -26,9 +26,9 @@ from sidthe.mpc import build_controller, MPCConfig
 
 
 def main() -> None:
-    """Run vanilla MPC simulation with multiple true scenarios."""
+    """Simule le MPC vanilla avec plusieurs scénarios réels."""
     print("=" * 60)
-    print("Figure 7: Vanilla MPC Infeasibility Demonstration")
+    print("Figure 7 : Démonstration infaisabilité MPC vanilla")
     print("=" * 60)
 
     # Configuration
@@ -36,28 +36,28 @@ def main() -> None:
     total_days = 350
     config = MPCConfig(horizon_days=84, npi_days=T_NPI)
 
-    # Generate scenarios for "true" systems
+    # Génération des scénarios "vrais"
     thetas_all, _ = generate_scenarios(theta_nom, rel=0.05)
-    rng = np.random.default_rng(42)  # Modern seed API for reproducibility
+    rng = np.random.default_rng(42)  # Seed moderne pour reproductibilité
     true_indices = rng.choice(len(thetas_all), n_true_scenarios, replace=False)
 
-    # Build vanilla controller (uses nominal parameters only)
+    # Construction du contrôleur vanilla (paramètres nominaux seulement)
     nominal_theta = theta_nom.to_array().reshape(1, 6)
     nominal_prob = np.array([1.0])
     solve_mpc = build_controller("vanilla", nominal_theta, nominal_prob, config)
 
-    print(f"Simulating {n_true_scenarios} true scenarios...")
-    print(f"Controller: Vanilla MPC with nominal parameters")
-    print(f"Horizon: {config.horizon_days} days, NPI block: {T_NPI} days")
+    print(f"Simulation de {n_true_scenarios} scénarios réels...")
+    print(f"Contrôleur : MPC vanilla avec paramètres nominaux")
+    print(f"Horizon : {config.horizon_days} jours, bloc NPI : {T_NPI} jours")
     print("-" * 60)
 
-    # Storage for trajectories
-    trajectories = []  # List of (ts, xs, us, infeasible_day)
+    # Stockage des trajectoires
+    trajectories = []  # Liste de (ts, xs, us, infeasible_day)
 
     for idx, true_idx in enumerate(true_indices):
         true_theta = SIDTHEParams.from_array(thetas_all[true_idx])
 
-        # Initialize
+        # Initialisation
         x_current = x0.copy()
         xs_traj = [x_current.copy()]
         us_traj = []
@@ -66,21 +66,21 @@ def main() -> None:
 
         day = 0
         while day < total_days:
-            # MPC decision at start of each NPI block
+            # Décision MPC au début de chaque bloc NPI
             if day % T_NPI == 0:
                 result = solve_mpc(x_current)
 
                 if not result["status"]:
-                    # Infeasible - mark and stop
+                    # Infaisable - marquer et arrêter
                     infeasible_day = day
                     break
 
                 u_applied = result["u0_applied"]
             else:
-                # Continue with same control
+                # Continue avec le même contrôle
                 pass
 
-            # Simulate one day with TRUE parameters
+            # Simule un jour avec les VRAIS paramètres
             u_seq = np.array([u_applied])
             _, xs_step = simulate_days(x_current, true_theta, u_seq, dt=DT)
             x_current = xs_step[-1]
@@ -101,16 +101,16 @@ def main() -> None:
         status = "INFEASIBLE at day " + str(infeasible_day) if infeasible_day else "OK"
         print(f"  Scenario {idx+1:2d}: {status}")
 
-    # Count feasible/infeasible
+    # Comptage faisable/infaisable
     n_infeasible = sum(1 for t in trajectories if t["infeasible_day"] is not None)
     n_feasible = n_true_scenarios - n_infeasible
     print("-" * 60)
-    print(f"Results: {n_feasible} feasible, {n_infeasible} infeasible")
+    print(f"Résultats : {n_feasible} faisables, {n_infeasible} infaisables")
 
-    # Create figure
+    # Création de la figure
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Top: % ICU
+    # Haut : % réa
     ax1 = axes[0]
     for traj in trajectories:
         ts = traj["ts"]

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Sanity check for scenario generation.
+Vérification de la génération de scénarios.
 
-Verifies that generate_scenarios produces 729 scenarios (3^6)
-with correct min/max bounds per parameter.
+Vérifie que generate_scenarios produit 729 scénarios (3^6)
+avec les bonnes bornes min/max par paramètre.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/sanity_scenarios.py
 """
 import sys
@@ -21,7 +21,7 @@ from sidthe.params import theta_nom, generate_scenarios
 
 
 def main() -> int:
-    """Run scenario generation sanity checks."""
+    """Lance les vérifications de génération de scénarios."""
     rel = 0.05
     thetas_array, probs = generate_scenarios(theta_nom, rel=rel)
 
@@ -29,24 +29,24 @@ def main() -> int:
     print("Scenario Generation Sanity Check")
     print("=" * 60)
 
-    # Check shape
+    # Vérification de la forme
     expected_shape = (729, 6)
     print(f"thetas_array.shape = {thetas_array.shape}")
-    print(f"Expected shape: {expected_shape}")
+    print(f"Forme attendue : {expected_shape}")
     assert thetas_array.shape == expected_shape, (
-        f"Shape mismatch: got {thetas_array.shape}, expected {expected_shape}"
+        f"Forme incorrecte : {thetas_array.shape}, attendu {expected_shape}"
     )
-    print("✓ Shape check passed")
+    print("✓ Vérification forme OK")
     print("-" * 60)
 
-    # Check probs
+    # Vérification des probabilités
     print(f"probs.shape = {probs.shape}")
     print(f"sum(probs) = {probs.sum():.12f}")
-    assert np.abs(probs.sum() - 1.0) < 1e-12, "Probabilities must sum to 1"
-    print("✓ Probability check passed")
+    assert np.abs(probs.sum() - 1.0) < 1e-12, "Les probabilités doivent sommer à 1"
+    print("✓ Vérification probabilités OK")
     print("-" * 60)
 
-    # Check min/max per parameter
+    # Vérification min/max par paramètre
     theta_nom_arr = theta_nom.to_array()
     param_names = ["alpha", "gamma", "lam", "delta", "sigma", "tau"]
     tol = 1e-12

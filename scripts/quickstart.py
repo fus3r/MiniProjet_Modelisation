@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Quickstart script for SIDTHE model simulation.
+Script de démarrage rapide pour le modèle SIDTHE.
 
-Simulates the epidemic over 350 days with no control (u=0),
-generates a figure showing % ICU over time, and prints diagnostics.
+Simule l'épidémie sur 350 jours sans intervention (u=0),
+génère la figure du % réa et affiche des diagnostics.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/quickstart.py
 """
 import sys
@@ -23,23 +23,23 @@ from sidthe.integrators import simulate_days
 
 
 def main() -> None:
-    """Run SIDTHE simulation and generate output figure."""
-    # Simulation parameters
+    """Simule SIDTHE et produit la figure de sortie."""
+    # Paramètres de simulation
     n_days = 350
-    u_seq = np.zeros(n_days, dtype=np.float64)  # No control (u=0)
+    u_seq = np.zeros(n_days, dtype=np.float64)  # Pas de contrôle (u=0)
 
-    # Run simulation
+    # Lancement de la simulation
     ts, xs = simulate_days(x0, theta_nom, u_seq, dt=DT)
 
-    # Extract state T (ICU occupancy fraction) - index 3
+    # Extraction de T (occupation réa) - indice 3
     T_traj = xs[:, 3]
 
     # Diagnostics
-    sum_x0 = x0.sum()  # Initial mass (may differ from 1 per paper values)
-    mass = xs.sum(axis=1)  # Sum of all compartments at each time
-    mass_drift = np.abs(mass - sum_x0)  # Drift from initial mass
+    sum_x0 = x0.sum()  # Masse initiale (peut différer de 1, cf. article)
+    mass = xs.sum(axis=1)  # Somme des compartiments à chaque instant
+    mass_drift = np.abs(mass - sum_x0)  # Dérive par rapport à la masse initiale
     max_mass_drift = mass_drift.max()
-    deviation_from_1 = np.abs(mass - 1.0).max()  # Deviation from 1
+    deviation_from_1 = np.abs(mass - 1.0).max()  # Écart par rapport à 1
     min_state = xs.min()
 
     print("=" * 60)
@@ -53,18 +53,18 @@ def main() -> None:
     print(f"Min state value over trajectory: min(x) = {min_state:.2e}")
     print("-" * 60)
 
-    # Create output directory
+    # Création du répertoire de sortie
     output_dir = REPO_ROOT / "outputs" / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "quickstart_T.png"
 
-    # Plot
+    # Tracé
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Plot % ICU = 100 * T
-    ax.plot(ts, 100 * T_traj, "b-", linewidth=2, label="% ICU (100 × T)")
+    # Courbe % réa = 100 × T
+    ax.plot(ts, 100 * T_traj, "b-", linewidth=2, label="% Réa (100 × T)")
 
-    # Plot threshold line at 100 * T_MAX = 0.2 %
+    # Seuil à 100 × T_MAX = 0.2 %
     ax.axhline(
         y=100 * T_MAX,
         color="r",

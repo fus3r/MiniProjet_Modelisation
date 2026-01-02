@@ -1,13 +1,13 @@
 """
-Model Predictive Control (MPC) for SIDTHE epidemic model.
+Contrôle prédictif (MPC) pour le modèle SIDTHE.
 
-Reference:
-    - Vanilla MPC: Eq (12), page 4
-    - Scenario-based SNMPC with recourse: Eq (13), page 5
-    - Robust SNMPC: Eq (14), page 5
+Références :
+    - MPC nominal (vanilla) : Eq (12), page 4
+    - SNMPC avec recourse : Eq (13), page 5
+    - SNMPC robuste : Eq (14), page 5
 
-Uses CasADi for NLP formulation with IPOPT solver.
-Single-shooting formulation (no state variables in NLP).
+Utilise CasADi pour la formulation NLP résolue par IPOPT.
+Formulation single-shooting (pas de variables d'état dans le NLP).
 """
 from dataclasses import dataclass, field
 from typing import Callable
@@ -22,28 +22,13 @@ from .safe_set import safe_set_intersection
 @dataclass
 class MPCConfig:
     """
-    MPC configuration parameters.
+    Configuration du MPC.
 
-    Attributes
-    ----------
-    horizon_days : int
-        Prediction horizon in days (default 84 = 6 blocks of 14 days).
-    dt : float
-        Integration time step [days] (default 1.0).
-    npi_days : int
-        NPI block duration [days] (default 14, piecewise-constant control).
-    u_max : float
-        Maximum control intensity (default 0.75).
-    t_max : float
-        ICU capacity constraint on T state (default 0.002).
-    enforce_icu_daily : bool
-        If True, enforce T <= t_max every day. If False, only at block ends.
-    max_scenarios_robust : int | None
-        Max scenarios for robust MPC. None = use all provided scenarios.
-    max_scenarios_recourse : int | None
-        Max scenarios for recourse MPC. None = use all provided scenarios.
-    scenario_seed : int
-        Seed for deterministic scenario reduction (if max_scenarios_* is set).
+    horizon_days : horizon de prédiction [jours] (défaut 84 = 6 blocs de 14 jours)
+    npi_days : durée d'un bloc NPI (contrôle constant par morceaux)
+    u_max, t_max : bornes sur contrôle et occupation réa
+    enforce_icu_daily : contrainte T ≤ t_max chaque jour (sinon fin de bloc)
+    max_scenarios_* : réduction du nombre de scénarios si spécifié
     """
 
     horizon_days: int = 84
@@ -58,23 +43,21 @@ class MPCConfig:
 
     @property
     def n_blocks(self) -> int:
-        """Number of control blocks in horizon."""
+        """Nombre de blocs de contrôle sur l'horizon."""
         return self.horizon_days // self.npi_days
 
 
 def _compute_constraint_violation(g: np.ndarray, lbg: list, ubg: list) -> float:
     """
-    Compute max constraint violation accounting for bounds.
-    
-    violation = max(max(lbg - g), max(g - ubg), 0)
+    Calcule la violation max des contraintes (positif = violé).
     """
     g_arr = np.array(g).flatten()
     lbg_arr = np.array(lbg, dtype=float)
     ubg_arr = np.array(ubg, dtype=float)
     
-    # Lower bound violation: lbg - g (positive if violated)
+    # Violation borne inf : lbg - g (positif si violé)
     lb_viol = np.where(np.isfinite(lbg_arr), lbg_arr - g_arr, -np.inf)
-    # Upper bound violation: g - ubg (positive if violated)
+    # Violation borne sup : g - ubg (positif si violé)
     ub_viol = np.where(np.isfinite(ubg_arr), g_arr - ubg_arr, -np.inf)
     
     max_viol = max(np.max(lb_viol), np.max(ub_viol), 0.0)
@@ -83,25 +66,19 @@ def _compute_constraint_violation(g: np.ndarray, lbg: list, ubg: list) -> float:
 
 def _build_casadi_rhs() -> ca.Function:
     """
-    Build CasADi function for SIDTHE ODE right-hand side.
+    Construit la fonction CasADi du membre de droite des EDO SIDTHE.
 
-    Implements Eq (4a)-(4f) from paper, page 3.
-
-    Returns
-    -------
-    rhs_fn : ca.Function
-        CasADi function: rhs(x, u, theta) -> dxdt
-        where x is (6,), u is scalar, theta is (6,).
+    Retourne rhs(x, u, theta) -> dxdt (symbolique).
     """
-    # Symbolic variables
+    # Variables symboliques
     x = ca.SX.sym("x", 6)
     u = ca.SX.sym("u")
     theta = ca.SX.sym("theta", 6)
 
-    # Unpack state: [S, I, D, T, H, E]
+    # État : [S, I, D, T, H, E]
     S, I, D, T, H, E = x[0], x[1], x[2], x[3], x[4], x[5]
 
-    # Unpack parameters: [alpha, gamma, lam, delta, sigma, tau]
+    # Paramètres : [alpha, gamma, lam, delta, sigma, tau]
     alpha = theta[0]
     gamma = theta[1]
     lam = theta[2]
@@ -109,7 +86,7 @@ def _build_casadi_rhs() -> ca.Function:
     sigma = theta[4]
     tau = theta[5]
 
-    # Common terms (avoid division by zero with small epsilon)
+    # Termes récurrents (epsilon pour éviter div/0)
     eps = 1e-12
     lam_plus_gamma = lam + gamma + eps
     infection_rate = alpha * (1.0 - u) * S * I
@@ -129,19 +106,9 @@ def _build_casadi_rhs() -> ca.Function:
 
 def _build_rk4_step(rhs_fn: ca.Function, dt: float) -> ca.Function:
     """
-    Build CasADi function for one RK4 integration step.
+    Construit la fonction CasADi pour un pas RK4.
 
-    Parameters
-    ----------
-    rhs_fn : ca.Function
-        Right-hand side function from _build_casadi_rhs().
-    dt : float
-        Time step size.
-
-    Returns
-    -------
-    step_fn : ca.Function
-        CasADi function: step(x, u, theta) -> x_next
+    Retourne step(x, u, theta) -> x_next.
     """
     x = ca.SX.sym("x", 6)
     u = ca.SX.sym("u")
@@ -164,15 +131,15 @@ def _reduce_scenarios(
     seed: int,
 ) -> tuple[np.ndarray, np.ndarray, int]:
     """
-    Reduce scenarios if max_scenarios is specified.
+    Réduit le nombre de scénarios si max_scenarios est spécifié.
 
-    Returns (thetas_used, probs_used, n_used).
+    Retourne (thetas_utilisés, probs_utilisées, n_utilisés).
     """
     n_scenarios = thetas_array.shape[0]
     if max_scenarios is None or n_scenarios <= max_scenarios:
         return thetas_array, probs, n_scenarios
 
-    # Deterministic reduction using seed
+    # Réduction déterministe (seed fixe pour reproductibilité)
     rng = np.random.default_rng(seed)
     indices = rng.choice(n_scenarios, max_scenarios, replace=False)
     indices = np.sort(indices)
@@ -192,50 +159,31 @@ def build_controller(
     safe_set: bool = False,
 ) -> Callable[[np.ndarray], dict]:
     """
-    Build MPC controller for SIDTHE model.
+    Construit un contrôleur MPC pour le modèle SIDTHE.
 
-    Parameters
-    ----------
-    mode : str
-        Controller mode:
-        - "vanilla": Nominal MPC using first scenario only, Eq (12)
-        - "robust": Robust SNMPC with shared controls, Eq (14)
-        - "recourse": SNMPC with non-anticipativity on first block, Eq (13)
-    thetas_array : np.ndarray
-        Parameter scenarios, shape (n_scenarios, 6).
-    probs : np.ndarray
-        Scenario probabilities, shape (n_scenarios,).
-    config : MPCConfig, optional
-        MPC configuration (default: MPCConfig()).
-    safe_set : bool, optional
-        Whether to enforce terminal safe set constraints (default False).
+    Modes disponibles :
+        - "vanilla" : MPC nominal (un seul scénario), Eq (12)
+        - "robust" : SNMPC robuste (contrôles partagés), Eq (14)
+        - "recourse" : SNMPC avec recourse (non-anticipativité sur u0), Eq (13)
 
-    Returns
-    -------
-    solve : Callable
-        Function solve(x0) -> dict with keys:
-        - 'status': bool, True if solved successfully
-        - 'u0_applied': float, control to apply now
-        - 'u_blocks': np.ndarray, full control sequence
-        - 'objective': float, optimal cost
-        - 'iterations': int, solver iterations
-        - 'constraint_violation': float, max constraint violation
-        - 'n_scenarios_used': int, actual number of scenarios used
+    Retourne une fonction solve(x0) -> dict avec les clés :
+        'status', 'u0_applied', 'u_blocks', 'objective', 'iterations',
+        'constraint_violation', 'n_scenarios_used'
     """
     if config is None:
         config = MPCConfig()
 
-    # Build CasADi dynamics
+    # Construction de la dynamique CasADi
     rhs_fn = _build_casadi_rhs()
     step_fn = _build_rk4_step(rhs_fn, config.dt)
 
-    # Safe set bounds (intersection over scenarios)
+    # Bornes ensemble sûr (intersection sur les scénarios)
     if safe_set:
         safe_bounds = safe_set_intersection(thetas_array)
     else:
         safe_bounds = None
 
-    # Build NLP based on mode
+    # Construction du NLP selon le mode
     if mode == "vanilla":
         return _build_vanilla_controller(
             step_fn, thetas_array[0], config, safe_bounds
@@ -259,26 +207,25 @@ def _build_vanilla_controller(
     safe_bounds: dict | None,
 ) -> Callable[[np.ndarray], dict]:
     """
-    Build vanilla (nominal) MPC controller.
+    Construit le MPC nominal (vanilla), Eq (12).
 
-    Implements Eq (12) from paper, page 4.
-    Uses single nominal parameter set for prediction.
+    Utilise un seul jeu de paramètres (nominal) pour la prédiction.
     """
     n_blocks = config.n_blocks
     npi_days = config.npi_days
     u_max = config.u_max
     t_max = config.t_max
 
-    # Decision variables: u_blocks (n_blocks,)
+    # Variables de décision : u_blocks (n_blocks,)
     u_blocks = ca.SX.sym("u_blocks", n_blocks)
 
-    # Parameter: initial state x0 (6,)
+    # Paramètre : état initial x0 (6,)
     x0_param = ca.SX.sym("x0", 6)
 
-    # Convert theta to CasADi
+    # Conversion theta en CasADi
     theta_ca = ca.DM(theta)
 
-    # Single-shooting rollout
+    # Déroulement single-shooting
     x = x0_param
     cost = 0.0
     constraints = []
@@ -288,26 +235,26 @@ def _build_vanilla_controller(
     for block in range(n_blocks):
         u_block = u_blocks[block]
         for day in range(npi_days):
-            # Cost: l(u) = u^2 (page 6)
+            # Coût : l(u) = u² (page 6)
             cost += u_block ** 2
 
-            # RK4 step
+            # Pas RK4
             x = step_fn(x, u_block, theta_ca)
 
-            # ICU constraint: T <= t_max (daily)
+            # Contrainte réa : T ≤ t_max (quotidien)
             constraints.append(x[3])
             lbg.append(-ca.inf)
             ubg.append(t_max)
 
-            # Non-negativity: x >= 0
+            # Non-négativité : x ≥ 0
             for i in range(6):
                 constraints.append(x[i])
                 lbg.append(0.0)
                 ubg.append(ca.inf)
 
-    # Terminal safe set constraints (if enabled)
+    # Contraintes terminales ensemble sûr (si activé)
     if safe_bounds is not None:
-        constraints.append(x[0])  # S_N <= Smax
+        constraints.append(x[0])  # S_N ≤ Smax
         lbg.append(-ca.inf)
         ubg.append(safe_bounds["Smax"])
         constraints.append(x[1])  # I_N <= Imax
@@ -320,7 +267,7 @@ def _build_vanilla_controller(
         lbg.append(-ca.inf)
         ubg.append(safe_bounds["Tmax"])
 
-    # NLP formulation
+    # Formulation NLP
     nlp = {
         "x": u_blocks,
         "f": cost,
@@ -328,7 +275,7 @@ def _build_vanilla_controller(
         "p": x0_param,
     }
 
-    # Solver options
+    # Options solveur (sortie silencieuse)
     opts = {
         "ipopt.print_level": 0,
         "ipopt.sb": "yes",
@@ -339,12 +286,12 @@ def _build_vanilla_controller(
 
     solver = ca.nlpsol("mpc_vanilla", "ipopt", nlp, opts)
 
-    # Bounds on decision variables
+    # Bornes sur les variables de décision
     lbx = [0.0] * n_blocks
     ubx = [u_max] * n_blocks
 
     def solve(x0: np.ndarray) -> dict:
-        """Solve MPC for given initial state."""
+        """Résout le MPC pour l'état initial donné."""
         try:
             sol = solver(
                 x0=np.zeros(n_blocks),
@@ -389,14 +336,10 @@ def _build_robust_controller(
     safe_bounds: dict | None,
 ) -> Callable[[np.ndarray], dict]:
     """
-    Build robust SNMPC controller.
+    Construit le SNMPC robuste, Eq (14).
 
-    Implements Eq (14) from paper, page 5.
-    Control sequence is shared across ALL scenarios (no recourse).
-    Constraints must be satisfied for ALL scenarios.
-
-    Cost is simplified: since u is shared, E[u^2] = u^2.
-    Constraints are enforced for every scenario.
+    Les contrôles sont partagés entre TOUS les scénarios (pas de recourse).
+    Les contraintes doivent être satisfaites pour chaque scénario.
     """
     n_blocks = config.n_blocks
     npi_days = config.npi_days
@@ -404,26 +347,25 @@ def _build_robust_controller(
     t_max = config.t_max
     enforce_icu_daily = config.enforce_icu_daily
 
-    # Use exactly the scenarios provided (no hidden reduction)
+    # Utilise exactement les scénarios fournis (pas de réduction cachée)
     thetas_used, probs_used, n_scenarios_used = _reduce_scenarios(
         thetas_array, probs,
         config.max_scenarios_robust,
         config.scenario_seed
     )
 
-    # Decision variables: u_blocks shared for all scenarios
+    # Variables de décision : u_blocks partagés pour tous les scénarios
     u_blocks = ca.SX.sym("u_blocks", n_blocks)
 
-    # Parameter: initial state x0 (6,)
+    # Paramètre : état initial x0 (6,)
     x0_param = ca.SX.sym("x0", 6)
 
-    # Cost: since u is shared across scenarios, cost = sum_k (npi_days * u_k^2)
-    # (No need to compute per-scenario, it's the same for all)
+    # Coût : u partagé ⇒ E[u²] = u², pas besoin de pondérer par scénario
     cost = 0.0
     for block in range(n_blocks):
         cost += npi_days * (u_blocks[block] ** 2)
 
-    # Build constraints over all scenarios
+    # Construction des contraintes sur tous les scénarios
     constraints = []
     lbg = []
     ubg = []
@@ -431,24 +373,24 @@ def _build_robust_controller(
     for i in range(n_scenarios_used):
         theta_i = ca.DM(thetas_used[i])
 
-        # Rollout for scenario i
+        # Déroulement pour le scénario i
         x = x0_param
 
         for block in range(n_blocks):
             u_block = u_blocks[block]
             for day in range(npi_days):
-                # RK4 step
+                # Pas RK4
                 x = step_fn(x, u_block, theta_i)
 
-                # Daily ICU constraint: T <= t_max
+                # Contrainte réa quotidienne : T ≤ t_max
                 if enforce_icu_daily:
                     constraints.append(x[3])
                     lbg.append(-ca.inf)
                     ubg.append(t_max)
 
-            # End-of-block constraints (non-negativity for key states)
+            # Contraintes fin de bloc (non-négativité sur états clés)
             if not enforce_icu_daily:
-                # ICU only at block end
+                # Réa uniquement en fin de bloc
                 constraints.append(x[3])
                 lbg.append(-ca.inf)
                 ubg.append(t_max)
@@ -545,11 +487,10 @@ def _build_recourse_controller(
     safe_bounds: dict | None,
 ) -> Callable[[np.ndarray], dict]:
     """
-    Build SNMPC controller with recourse (non-anticipativity).
+    Construit le SNMPC avec recourse (non-anticipativité), Eq (13).
 
-    Implements Eq (13) from paper, page 5.
-    Non-anticipativity constraint (13e): first control u_0 is shared,
-    subsequent controls can differ per scenario.
+    Contrainte (13e) : seul u_0 est partagé, les blocs suivants peuvent
+    différer selon le scénario.
     """
     n_blocks = config.n_blocks
     npi_days = config.npi_days
@@ -557,16 +498,16 @@ def _build_recourse_controller(
     t_max = config.t_max
     enforce_icu_daily = config.enforce_icu_daily
 
-    # Use exactly the scenarios provided (no hidden reduction)
+    # Utilise exactement les scénarios fournis (pas de réduction cachée)
     thetas_used, probs_used, n_scenarios_used = _reduce_scenarios(
         thetas_array, probs,
         config.max_scenarios_recourse,
         config.scenario_seed
     )
 
-    # Decision variables:
-    # - u0_shared: first block control, shared (non-anticipativity Eq 13e)
-    # - u_rest[i]: blocks 1 to n_blocks-1 for scenario i
+    # Variables de décision :
+    # - u0_shared : premier bloc, partagé (non-anticipativité Eq 13e)
+    # - u_rest[i] : blocs 1 à n_blocks-1 pour le scénario i
     u0_shared = ca.SX.sym("u0_shared")
 
     u_rest_vars = []
@@ -574,10 +515,10 @@ def _build_recourse_controller(
         u_rest_i = ca.SX.sym(f"u_rest_{i}", n_blocks - 1)
         u_rest_vars.append(u_rest_i)
 
-    # Parameter: initial state x0 (6,)
+    # Paramètre : état initial x0 (6,)
     x0_param = ca.SX.sym("x0", 6)
 
-    # Build cost and constraints
+    # Construction coût et contraintes
     total_cost = 0.0
     constraints = []
     lbg = []
@@ -587,27 +528,27 @@ def _build_recourse_controller(
         theta_i = ca.DM(thetas_used[idx])
         p_i = probs_used[idx]
 
-        # Rollout for scenario idx
+        # Déroulement pour le scénario idx
         x = x0_param
         scenario_cost = 0.0
 
         for block in range(n_blocks):
             if block == 0:
-                u_block = u0_shared  # Shared (non-anticipativity)
+                u_block = u0_shared  # Partagé (non-anticipativité)
             else:
-                u_block = u_rest_vars[idx][block - 1]  # Scenario-specific
+                u_block = u_rest_vars[idx][block - 1]  # Spécifique au scénario
 
             for day in range(npi_days):
                 scenario_cost += u_block ** 2
                 x = step_fn(x, u_block, theta_i)
 
-                # Daily ICU constraint: T <= t_max
+                # Contrainte réa quotidienne : T ≤ t_max
                 if enforce_icu_daily:
                     constraints.append(x[3])
                     lbg.append(-ca.inf)
                     ubg.append(t_max)
 
-            # End-of-block constraints
+            # Contraintes fin de bloc
             if not enforce_icu_daily:
                 constraints.append(x[3])
                 lbg.append(-ca.inf)
@@ -639,10 +580,10 @@ def _build_recourse_controller(
             lbg.append(-ca.inf)
             ubg.append(safe_bounds["Tmax"])
 
-        # Expected cost (Eq 13)
+        # Coût espéré (Eq 13)
         total_cost += p_i * scenario_cost
 
-    # Concatenate all decision variables
+    # Concaténation des variables de décision
     all_vars = [u0_shared] + u_rest_vars
     x_nlp = ca.vertcat(*all_vars)
 
@@ -664,7 +605,7 @@ def _build_recourse_controller(
 
     solver = ca.nlpsol("mpc_recourse", "ipopt", nlp, opts)
 
-    # Bounds
+    # Bornes
     n_vars = 1 + n_scenarios_used * (n_blocks - 1)
     lbx = [0.0] * n_vars
     ubx = [u_max] * n_vars
@@ -683,7 +624,7 @@ def _build_recourse_controller(
             u0_opt = x_opt[0]
             stats = solver.stats()
 
-            # Extract average u_blocks for reporting
+            # Moyenne des u_blocks pour le reporting
             u_blocks_avg = np.zeros(n_blocks)
             u_blocks_avg[0] = u0_opt
             for block in range(1, n_blocks):

@@ -1,7 +1,7 @@
 """
-SIDTHE model dynamics.
+Dynamique du modèle SIDTHE.
 
-Reference: ODE system Eq (4a)-(4f), page 3.
+Implémente le système d'EDO (4a)-(4f), cf. article page 3.
 """
 import numpy as np
 
@@ -15,43 +15,27 @@ def rhs(
     params: SIDTHEParams,
 ) -> np.ndarray:
     """
-    Right-hand side of the SIDTHE ODE system.
+    Membre de droite du système d'EDO SIDTHE.
 
-    Implements Eq (4a)-(4f) from the paper, page 3:
-        Sdot = -α(1-u) S I                                   (4a)
-        Idot = α(1-u) S I - γ*(1 + λ/(λ+γ))*I                (4b)
-        Ddot = γ I - (δ+λ) D                                 (4c)
-        Tdot = δ D - (σ+τ) T                                 (4d)
-        Hdot = σ T + λ D + λ*(γ/(λ+γ))*I                     (4e)
-        Edot = τ T                                           (4f)
+    Calcule dx/dt selon les équations (4a)-(4f) de l'article :
+        Sdot = -α(1-u) S I
+        Idot = α(1-u) S I - γ*(1 + λ/(λ+γ))*I
+        Ddot = γ I - (δ+λ) D
+        Tdot = δ D - (σ+τ) T
+        Hdot = σ T + λ D + λ*(γ/(λ+γ))*I
+        Edot = τ T
 
-    States are population fractions: x = [S, I, D, T, H, E].
-
-    Parameters
-    ----------
-    t : float
-        Current time (unused in autonomous system, kept for interface).
-    x : np.ndarray
-        State vector of shape (6,): [S, I, D, T, H, E].
-    u : float
-        Control input in [0, U_MAX]. Represents intervention intensity.
-        (Paper: u in [0, u_max] with u_max = 0.75)
-    params : SIDTHEParams
-        Model parameters (α, γ, λ, δ, σ, τ).
-
-    Returns
-    -------
-    dxdt : np.ndarray
-        Time derivative of state, shape (6,).
+    L'état x = [S, I, D, T, H, E] représente des fractions de population.
+    Le contrôle u ∈ [0, 0.75] modélise l'intensité des interventions.
     """
-    # Assertions for safety
-    assert x.shape == (6,), f"State x must have shape (6,), got {x.shape}"
-    u = float(np.clip(u, 0.0, U_MAX))  # Clamp control to [0, U_MAX]
+    # Vérification de cohérence
+    assert x.shape == (6,), f"État x doit être de dim 6, reçu {x.shape}"
+    u = float(np.clip(u, 0.0, U_MAX))  # Borne le contrôle à [0, U_MAX]
 
-    # Unpack state
+    # Extraction de l'état
     S, I, D, T, H, E = x
 
-    # Unpack parameters
+    # Extraction des paramètres épidémiologiques
     alpha = params.alpha
     gamma = params.gamma
     lam = params.lam
@@ -59,12 +43,12 @@ def rhs(
     sigma = params.sigma
     tau = params.tau
 
-    # Precompute common terms
+    # Termes récurrents (évite la redondance)
     lam_plus_gamma = lam + gamma
-    assert lam_plus_gamma > 0, "λ + γ must be > 0 to avoid division by zero"
+    assert lam_plus_gamma > 0, "λ + γ doit être > 0 pour éviter la division par zéro"
     infection_rate = alpha * (1.0 - u) * S * I
 
-    # Eq (4a)-(4f)
+    # Équations (4a)-(4f)
     Sdot = -infection_rate
     Idot = infection_rate - gamma * (1.0 + lam / lam_plus_gamma) * I
     Ddot = gamma * I - (delta + lam) * D

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Figure 4: Recourse SNMPC simulation.
+Figure 4 : Simulation SNMPC avec recourse.
 
-Demonstrates scenario-based NMPC with recourse (Eq 13) where only the
-first control block is shared (non-anticipativity), subsequent blocks
-can adapt per scenario.
+Démontre le SNMPC avec recourse (Eq 13) où seul le premier bloc
+de contrôle est partagé (non-anticipativité), les blocs suivants
+peuvent s'adapter par scénario.
 
-Reference: Paper Figure 4, page 6.
+Référence : Figure 4 de l'article, page 6.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/fig4_recourse.py
 """
 import sys
@@ -27,58 +27,58 @@ from sidthe.mpc import build_controller, MPCConfig
 
 
 def main() -> None:
-    """Run recourse SNMPC simulation."""
+    """Lance la simulation SNMPC avec recourse."""
     print("=" * 60)
-    print("Figure 4: Recourse SNMPC Simulation")
+    print("Figure 4 : Simulation SNMPC avec recourse")
     print("=" * 60)
 
     # Configuration
     n_sim_scenarios = 25
     total_days = 350
     
-    # Strategy A: simulation ⊂ MPC scenarios (guarantees ICU respect)
-    n_mpc_scenarios = 30  # Must be >= n_sim_scenarios
-    scenario_seed = 123   # For reproducibility
+    # Stratégie A : simulation ⊂ scénarios MPC (garantit respect réa)
+    n_mpc_scenarios = 30  # Doit être >= n_sim_scenarios
+    scenario_seed = 123   # Pour reproductibilité
     
-    # Config: no internal reduction (max_scenarios_recourse=None)
+    # Config : pas de réduction interne (max_scenarios_recourse=None)
     config = MPCConfig(
         horizon_days=84,
         npi_days=T_NPI,
         enforce_icu_daily=True,
-        max_scenarios_recourse=None,  # Use exactly what we pass
+        max_scenarios_recourse=None,  # Utilise exactement ce qu'on passe
     )
 
-    # Generate all 729 scenarios
+    # Génère les 729 scénarios
     thetas_all, probs_all = generate_scenarios(theta_nom, rel=0.05)
 
-    # EXPLICIT: Select subset of scenarios for recourse MPC
+    # EXPLICITE : sélection d'un sous-ensemble pour le MPC recourse
     rng = np.random.default_rng(scenario_seed)
     mpc_indices = rng.choice(len(thetas_all), n_mpc_scenarios, replace=False)
     thetas_mpc = thetas_all[mpc_indices]
     probs_mpc = probs_all[mpc_indices]
     probs_mpc = probs_mpc / probs_mpc.sum()
 
-    print(f"Building recourse controller...")
-    print(f"  - n_mpc_scenarios: {n_mpc_scenarios}")
-    print(f"  - scenario_seed: {scenario_seed}")
-    print(f"  - enforce_icu_daily: {config.enforce_icu_daily}")
+    print(f"Construction du contrôleur recourse...")
+    print(f"  - n_mpc_scenarios : {n_mpc_scenarios}")
+    print(f"  - scenario_seed : {scenario_seed}")
+    print(f"  - enforce_icu_daily : {config.enforce_icu_daily}")
     solve_mpc = build_controller("recourse", thetas_mpc, probs_mpc, config)
     
-    # Verify actual scenarios used
+    # Vérifie le nombre réel de scénarios utilisés
     test_result = solve_mpc(x0)
-    print(f"  - n_scenarios_used (actual): {test_result['n_scenarios_used']}")
+    print(f"  - n_scenarios_used (effectif) : {test_result['n_scenarios_used']}")
 
-    # Strategy A: sim_indices is a SUBSET of mpc_indices
+    # Stratégie A : sim_indices est un SOUS-ENSEMBLE de mpc_indices
     sim_rng = np.random.default_rng(42)
     sim_indices = sim_rng.choice(mpc_indices, n_sim_scenarios, replace=False)
-    print(f"\nSimulation ⊂ MPC scenarios: {n_sim_scenarios} of {n_mpc_scenarios}")
+    print(f"\nSimulation ⊂ scénarios MPC : {n_sim_scenarios} sur {n_mpc_scenarios}")
 
-    print(f"Simulating {n_sim_scenarios} scenarios...")
-    print(f"Horizon: {config.horizon_days} days, NPI block: {T_NPI} days")
+    print(f"Simulation de {n_sim_scenarios} scénarios...")
+    print(f"Horizon : {config.horizon_days} jours, bloc NPI : {T_NPI} jours")
     print("-" * 60)
 
     trajectories = []
-    max_T_all = -np.inf  # Track max T across all trajectories
+    max_T_all = -np.inf  # Suit le max T sur toutes les trajectoires
 
     for idx, true_idx in enumerate(sim_indices):
         true_theta = SIDTHEParams.from_array(thetas_all[true_idx])
@@ -117,19 +117,19 @@ def main() -> None:
         max_T_all = max(max_T_all, traj_xs[:, 3].max())
 
         if (idx + 1) % 5 == 0:
-            print(f"  Completed {idx+1}/{n_sim_scenarios} scenarios")
+            print(f"  Terminé {idx+1}/{n_sim_scenarios} scénarios")
 
-    # Report max ICU violation
+    # Rapport violation max réa
     max_violation = max_T_all - T_MAX
     print("-" * 60)
     print(f"max(T - T_MAX) = {max_violation:.6e}")
-    if max_violation > 1e-6:  # Warn only for visible violations (not numerical noise)
-        print(f"  WARNING: ICU threshold exceeded!")
+    if max_violation > 1e-6:  # Alerte uniquement pour violations visibles (pas bruit numérique)
+        print(f"  ATTENTION : Seuil réa dépassé !")
 
-    # Create figure
+    # Création de la figure
     fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
 
-    # Top: % ICU
+    # Haut : % réa
     ax1 = axes[0]
     for traj in trajectories:
         ts = traj["ts"]
@@ -144,15 +144,15 @@ def main() -> None:
     ax1.grid(True, alpha=0.3)
     ax1.set_ylim(bottom=0)
 
-    # Bottom: Control
+    # Bas : Contrôle
     ax2 = axes[1]
     for traj in trajectories:
         ts_u = traj["ts"][:-1]
         ax2.plot(ts_u, traj["us"], "forestgreen", alpha=0.4, linewidth=0.8)
 
-    ax2.set_xlabel("Time [days]", fontsize=12)
-    ax2.set_ylabel("α reduction (u)", fontsize=12)
-    ax2.set_title("Recourse SNMPC: Control Input", fontsize=14)
+    ax2.set_xlabel("Temps [jours]", fontsize=12)
+    ax2.set_ylabel("Réduction α (u)", fontsize=12)
+    ax2.set_title("SNMPC Recourse : Entrée de contrôle", fontsize=14)
     ax2.grid(True, alpha=0.3)
     ax2.set_xlim(0, total_days)
     ax2.set_ylim(0, 1)

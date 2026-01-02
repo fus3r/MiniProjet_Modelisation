@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Snapshot for Figures 5 and 6 (MPC solution snapshots).
+Snapshot pour les Figures 5 et 6 (instantanés de solution MPC).
 
-Note: Figures 5 and 6 in the paper show single MPC snapshot solutions,
-which are internal solver outputs. This script generates comparable
-diagnostics showing the MPC prediction horizon at a selected time step.
+Note : Les figures 5 et 6 de l'article montrent des solutions instantanées du MPC,
+qui sont des sorties internes du solveur. Ce script génère des diagnostics
+comparables montrant l'horizon de prédiction MPC à un instant donné.
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python scripts/snapshot_fig5_6.py
 """
 import sys
@@ -25,17 +25,17 @@ from sidthe.mpc import build_controller, MPCConfig
 
 def main() -> int:
     print("=" * 60)
-    print("MPC Snapshot (Figures 5/6 style)")
+    print("Snapshot MPC (style Figures 5/6)")
     print("=" * 60)
     
-    # Setup
+    # Configuration
     config = MPCConfig(
         horizon_days=84,
         npi_days=T_NPI,
         enforce_icu_daily=True,
     )
     
-    # Generate scenarios
+    # Génération des scénarios
     thetas_all, probs_all = generate_scenarios(theta_nom, rel=0.05)
     rng = np.random.default_rng(123)
     n_scenarios = 10
@@ -44,22 +44,22 @@ def main() -> int:
     probs = probs_all[idx]
     probs /= probs.sum()
     
-    # Build controller
+    # Construction du contrôleur
     solve = build_controller("robust", thetas, probs, config)
     
-    # Solve at initial state
+    # Résolution à l'état initial
     result = solve(x0)
     
     if not result["status"]:
-        print("MPC infeasible at x0!")
+        print("MPC infaisable en x0 !")
         return 1
     
-    print(f"MPC solved successfully")
+    print(f"MPC résolu avec succès")
     print(f"  u0 = {result['u0_applied']:.4f}")
     print(f"  u_blocks = {result['u_blocks']}")
     print(f"  objective = {result['objective']:.6f}")
     
-    # Simulate predicted trajectories for each scenario
+    # Simule les trajectoires prédites pour chaque scénario
     fig, axes = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     
     u_blocks = result["u_blocks"]
@@ -70,16 +70,16 @@ def main() -> int:
         from sidthe.params import SIDTHEParams
         theta_params = SIDTHEParams.from_array(theta_s)
         
-        # Build control sequence (14 days per block)
+        # Construit la séquence de contrôle (14 jours par bloc)
         u_seq = np.repeat(u_blocks, T_NPI)
         
-        # Simulate
+        # Simule
         ts, xs = simulate_days(x0, theta_params, u_seq, dt=DT)
         
-        # Plot ICU
+        # Trace réa
         axes[0].plot(ts, xs[:, 3] * 100, alpha=0.5, linewidth=1)
     
-    # ICU threshold
+    # Seuil réa
     axes[0].axhline(y=100 * T_MAX, color="r", linestyle="--", linewidth=1.5,
                     label=f"ICU threshold ({100*T_MAX:.1f}%)")
     axes[0].set_ylabel("% ICU", fontsize=11)
@@ -88,23 +88,23 @@ def main() -> int:
     axes[0].grid(True, alpha=0.3)
     axes[0].set_ylim(bottom=0)
     
-    # Plot control blocks - extend last step to horizon end
-    # u_blocks: array of planned controls for each block (length n)
-    # T_NPI: block duration in days
-    # horizon_days: end of horizon (e.g., 84)
+    # Tracé des blocs de contrôle - prolonge le dernier jusqu'à la fin de l'horizon
+    # u_blocks : contrôles planifiés pour chaque bloc (longueur n)
+    # T_NPI : durée d'un bloc en jours
+    # horizon_days : fin de l'horizon (ex: 84)
     u_blocks = np.asarray(u_blocks).reshape(-1)
     t0 = np.arange(len(u_blocks)) * T_NPI              # [0, 14, 28, 42, 56, 70]
     t_step = np.r_[t0, config.horizon_days]            # [0, 14, 28, 42, 56, 70, 84] (len=n+1)
     u_step = np.r_[u_blocks, u_blocks[-1]]             # [u0, u1, ..., u5, u5]       (len=n+1)
     
-    # Sanity checks to prevent regressions
-    assert t_step[0] == 0, "t_step must start at 0"
-    assert t_step[-1] == config.horizon_days, "t_step must end at horizon_days"
-    assert len(t_step) == len(u_step), "t_step and u_step must have same length"
+    # Vérifications pour éviter les régressions
+    assert t_step[0] == 0, "t_step doit commencer à 0"
+    assert t_step[-1] == config.horizon_days, "t_step doit finir à horizon_days"
+    assert len(t_step) == len(u_step), "t_step et u_step doivent avoir la même longueur"
     
-    # With where="post", y[i] is drawn from x[i] to x[i+1]
-    # So y[5] (last block value) is drawn from x[5]=70 to x[6]=84
-    # The last value y[6] is never drawn (no x[7]), which is fine since it's just a duplicate
+    # Avec where="post", y[i] est tracé de x[i] à x[i+1]
+    # Donc y[5] (dernière valeur de bloc) est tracé de x[5]=70 à x[6]=84
+    # La dernière valeur y[6] n'est jamais tracée (pas de x[7]), ce qui est ok car c'est un doublon
     axes[1].fill_between(t_step, 0, u_step, step='post', alpha=0.3, color="steelblue")
     axes[1].step(t_step, u_step, where="post", linewidth=2, color="steelblue")
     axes[1].set_xlabel("Time [days]", fontsize=11)
@@ -116,7 +116,7 @@ def main() -> int:
     
     plt.tight_layout()
     
-    # Save
+    # Sauvegarde
     output_dir = REPO_ROOT / "outputs" / "figures"
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "snapshot_mpc_horizon.png"

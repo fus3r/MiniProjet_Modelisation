@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Check ICU constraint violations for MPC simulations.
+Vérification des violations de contrainte réa pour les simulations MPC.
 
-Validates that robust and recourse SNMPC respect T <= T_MAX daily.
-Runs quick simulations and reports max(T - T_MAX) across all trajectories.
+Valide que les SNMPC robuste et recourse respectent T ≤ T_MAX quotidiennement.
+Lance des simulations rapides et rapporte max(T - T_MAX) sur toutes les trajectoires.
 
-Exit code 0: All violations <= tolerance (1e-10)
-Exit code 1: Violations exceed tolerance
+Code de sortie 0 : Toutes violations ≤ tolérance (1e-10)
+Code de sortie 1 : Violations dépassent la tolérance
 
-Usage (from repository root):
+Usage (depuis la racine du dépôt) :
     python3 scripts/check_icu_violations.py
 """
 import sys

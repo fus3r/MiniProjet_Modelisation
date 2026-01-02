@@ -1,8 +1,8 @@
 """
-SIDTHE model parameters and constants.
+Paramètres et constantes du modèle SIDTHE.
 
-Reference: Paper Eq (5), page 3 for parameter order θ=[α,γ,λ,δ,σ,τ]^T.
-Numerical values from page 6.
+Ordre des paramètres : θ = [α, γ, λ, δ, σ, τ]^T (Eq 5, page 3).
+Valeurs numériques tirées de l'article, page 6.
 """
 from dataclasses import dataclass
 from itertools import product
@@ -13,24 +13,14 @@ import numpy as np
 @dataclass
 class SIDTHEParams:
     """
-    SIDTHE model epidemiological parameters.
+    Paramètres épidémiologiques du modèle SIDTHE.
 
-    Parameter order follows Eq (5), page 3: θ = [α, γ, λ, δ, σ, τ]^T.
-
-    Attributes
-    ----------
-    alpha : float
-        Transmission rate (α).
-    gamma : float
-        Rate of detection/diagnosis (γ).
-    lam : float
-        Recovery rate for diagnosed (λ). Named 'lam' to avoid Python keyword.
-    delta : float
-        Rate of worsening to critical (δ).
-    sigma : float
-        Recovery rate from critical (σ).
-    tau : float
-        Death rate from critical (τ).
+    α : taux de transmission
+    γ : taux de détection
+    λ : taux de guérison des diagnostiqués (nom 'lam' pour éviter le mot-clé Python)
+    δ : taux d'aggravation vers soins critiques
+    σ : taux de guérison des cas critiques
+    τ : taux de décès
     """
 
     alpha: float
@@ -41,7 +31,7 @@ class SIDTHEParams:
     tau: float
 
     def to_array(self) -> np.ndarray:
-        """Convert parameters to numpy array, shape (6,)."""
+        """Convertit les paramètres en array numpy (6,)."""
         return np.array(
             [self.alpha, self.gamma, self.lam, self.delta, self.sigma, self.tau],
             dtype=np.float64,
@@ -49,20 +39,8 @@ class SIDTHEParams:
 
     @classmethod
     def from_array(cls, arr: np.ndarray) -> "SIDTHEParams":
-        """
-        Create SIDTHEParams from numpy array.
-
-        Parameters
-        ----------
-        arr : np.ndarray
-            Array of shape (6,) with parameters [α, γ, λ, δ, σ, τ].
-
-        Returns
-        -------
-        SIDTHEParams
-            Instance with the given parameter values.
-        """
-        assert arr.shape == (6,), f"Expected shape (6,), got {arr.shape}"
+        """Crée un SIDTHEParams depuis un array [α, γ, λ, δ, σ, τ]."""
+        assert arr.shape == (6,), f"Attendu (6,), reçu {arr.shape}"
         return cls(
             alpha=float(arr[0]),
             gamma=float(arr[1]),
@@ -74,20 +52,20 @@ class SIDTHEParams:
 
 
 # ---------------------------------------------------------------------------
-# Simulation constants (page 6)
+# Constantes de simulation (page 6)
 # ---------------------------------------------------------------------------
 
-DT: float = 1.0  # Time step [days] for RK4 integration
-U_MAX: float = 0.75  # Maximum control intensity
-T_MAX: float = 0.002  # ICU capacity threshold (fraction)
-T_NPI: int = 14  # Non-pharmaceutical intervention delay [days]
+DT: float = 1.0  # Pas de temps [jours] pour RK4
+U_MAX: float = 0.75  # Intensité max du contrôle
+T_MAX: float = 0.002  # Seuil de capacité en réanimation (fraction)
+T_NPI: int = 14  # Durée d'un bloc NPI [jours]
 
 
 # ---------------------------------------------------------------------------
-# Initial condition x0 (page 6)
-# Order: [S, I, D, T, H, E]
-# Note: sum(x0) = 0.99829, slightly < 1 due to paper's original values.
-# This is intentional to match the reference; mass is conserved during integration.
+# Condition initiale x0 (page 6)
+# Ordre : [S, I, D, T, H, E]
+# Note : sum(x0) = 0.99829, légèrement < 1 (valeurs de l'article).
+# La masse totale est conservée pendant l'intégration.
 # ---------------------------------------------------------------------------
 
 x0: np.ndarray = np.array(
@@ -97,7 +75,7 @@ x0: np.ndarray = np.array(
 
 
 # ---------------------------------------------------------------------------
-# Nominal parameters θ_nom (page 6)
+# Paramètres nominaux θ_nom (page 6)
 # ---------------------------------------------------------------------------
 
 theta_nom: SIDTHEParams = SIDTHEParams(
@@ -115,29 +93,15 @@ def generate_scenarios(
     rel: float = 0.05,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Generate uncertainty scenarios with ±rel% variation on each parameter.
+    Génère les scénarios d'incertitude avec variation ±rel sur chaque paramètre.
 
-    Each of the 6 parameters takes 3 values: (1-rel), 1.0, (1+rel) times nominal.
-    This yields 3^6 = 729 scenarios.
-
-    Parameters
-    ----------
-    theta : SIDTHEParams
-        Nominal parameter set.
-    rel : float, optional
-        Relative perturbation (default 0.05 for ±5%).
-
-    Returns
-    -------
-    thetas_array : np.ndarray
-        Array of shape (729, 6) with all scenario parameter sets.
-    probs : np.ndarray
-        Uniform probability weights, shape (729,), summing to 1.
+    Chaque paramètre prend 3 valeurs : (1-rel), 1.0, (1+rel) fois la valeur nominale.
+    Produit 3^6 = 729 scénarios avec probabilités uniformes.
     """
     multipliers = [1.0 - rel, 1.0, 1.0 + rel]
     nominal = theta.to_array()
 
-    # Cartesian product of 6 parameters, each with 3 values
+    # Produit cartésien des 6 paramètres, chacun avec 3 valeurs
     scenarios = []
     for combo in product(multipliers, repeat=6):
         scenarios.append(nominal * np.array(combo))
