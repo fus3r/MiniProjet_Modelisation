@@ -1,28 +1,26 @@
 #!/usr/bin/env python3
 """
-Discrete Event Simulator (DES) for epidemic mode transitions.
+MODULE DE SIMULATION À ÉVÉNEMENTS DISCRETS (DES)
+------------------------------------------------
+Correspondance avec le cours "Systèmes à Événements Discrets" (TD2):
+Ce simulateur implémente un Réseau de Petri Temporisé Stochastique (RdP-TS).
 
-Bonus: Part II - Simple automaton modeling epidemic phases.
+1. PLACES (P) : Les compartiments de population
+   P = {S, I, D, T, H, E}
+   Le marquage M(P) correspond au nombre d'individus (entiers) dans chaque état.
 
-States (modes):
-    - NORMAL: Regular epidemic dynamics
-    - ALERT: ICU approaching threshold
-    - LOCKDOWN: Strong NPIs active
-    - RECOVERY: Post-peak, decreasing cases
+2. TRANSITIONS (Tr) : Les événements épidémiques
+   - Tr_Infection : S + I -> 2I (Tir conditionné par la présence de jetons dans S et I)
+   - Tr_Detection : I -> D
+   - Tr_Hospitalisation : D -> T
+   - Tr_Guerison : I->H, D->H, T->H
+   - Tr_Deces : T -> E
 
-Events:
-    - ICU_HIGH: T > 0.8 * T_MAX (triggers ALERT or LOCKDOWN)
-    - ICU_CRITICAL: T > T_MAX (triggers LOCKDOWN)
-    - ICU_LOW: T < 0.3 * T_MAX (relaxes restrictions)
-    - VARIANT: New variant arrival (increases alpha)
-    - VACCINE: Vaccine rollout (decreases susceptible pool)
-
-Output:
-    - outputs/figures/des_trace.png : Mode trace over time
-
-Usage (from repository root):
-    python scripts/des_simulator.py
+3. TEMPORISATION :
+   Les tirs de transitions suivent une loi exponentielle (Processus de Poisson).
+   L'algorithme utilisé est celui de Gillespie (SSA).
 """
+
 import sys
 from pathlib import Path
 from dataclasses import dataclass, field
