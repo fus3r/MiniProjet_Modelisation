@@ -57,3 +57,55 @@ def rhs(
     Edot = tau * T
 
     return np.array([Sdot, Idot, Ddot, Tdot, Hdot, Edot], dtype=np.float64)
+
+
+def get_jacobian_matrix(x, u, p):
+    """
+    Calcule la matrice Jacobienne A = df/dx au point d'état x.
+    Requis pour l'analyse de stabilité locale (Cours 01-1 / TD1).
+    """
+    # Récupération des variables d'état
+    S, I, D, T, H, E = x
+
+    # Termes auxiliaires (dépendants des paramètres p)
+    # Vérifie que p possède bien ces attributs (ex: p.gamma)
+    term_gamma_eff = p.gamma * (1 + p.lam / (p.lam + p.gamma))
+    term_lambda_rec = p.lam * (p.gamma / (p.lam + p.gamma))
+
+    # Initialisation de la matrice 6x6
+    J = np.zeros((6, 6))
+
+    # Ligne 1: dS/dt = -alpha(1-u)SI
+    J[0, 0] = -p.alpha * (1 - u) * I  # dS/dS
+    J[0, 1] = -p.alpha * (1 - u) * S  # dS/dI
+
+    # Ligne 2: dI/dt (Dynamique critique de l'infection)
+    J[1, 0] = p.alpha * (1 - u) * I           # dI/dS
+    J[1, 1] = p.alpha * (1 - u) * S - term_gamma_eff  # dI/dI
+
+    # Ligne 3: dD/dt
+    J[2, 1] = p.gamma
+    J[2, 2] = -(p.delta + p.lam)
+
+    # Ligne 4: dT/dt
+    J[3, 2] = p.delta
+    J[3, 3] = -(p.sigma + p.tau)
+
+    # Ligne 5: dH/dt
+    J[4, 1] = term_lambda_rec
+    J[4, 2] = p.lam
+    J[4, 3] = p.sigma
+
+    # Ligne 6: dE/dt
+    J[5, 3] = p.tau
+
+    return J
+
+def check_stability_eigenvalues(x_eq, u_eq, p):
+    """
+    Retourne les valeurs propres de la Jacobienne.
+    Critère TD1 : Stable si Max(Re(eigenvalues)) < 0.
+    """
+    J = get_jacobian_matrix(x_eq, u_eq, p)
+    eigvals = np.linalg.eigvals(J)
+    return eigvals
