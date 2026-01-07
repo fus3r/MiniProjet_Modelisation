@@ -57,7 +57,7 @@ python scripts/run_experiment.py
 ```
 Scénarios Spécifiques
 Vous pouvez relancer chaque figure individuellement :
-```
+
 MPC Robuste (Fig 3) : Contrôle avec incertitude paramétrique.
 ```bash
 python scripts/fig3_robust.py
