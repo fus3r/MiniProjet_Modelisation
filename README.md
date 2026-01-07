@@ -38,7 +38,7 @@ Ce script est **fondamental**. Il valide les propriétés théoriques du modèle
 
 ```bash
 python run_academic_validation.py
-
+```
 ---
 
 ## 2. Partie I : Modèle Continu & Contrôle MPC
@@ -69,7 +69,7 @@ python scripts/fig4_recourse.py
 Infaisabilité (Fig 7) : Limites du MPC standard.
 ```bash
 python scripts/fig7_vanilla_infeasibility.py
-
+```
 ---
 
 ## 🎲 3. Partie II : Événements Discrets
@@ -78,7 +78,7 @@ Cette partie utilise un **Réseau de Petri Temporisé** pour simuler la stochast
 
 ```bash
 python scripts/des_simulator.py
-
+```
 ---
 
 ## ✅ 4. Tests et Qualité du Code
